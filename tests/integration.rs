@@ -2,8 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-use forge::cli;
-use forge::{
+use dx_forge::cli;
+use dx_forge::{
     build_package_status, build_remote_health_report, build_sync_overview, execute_sync,
     plan_sync_with_registry, remote_definition, retry_job, retry_job_at, upsert_remote,
     write_package_lock, write_package_status_receipt, AuthStore, BranchMapping, MetadataDb,
@@ -144,8 +144,8 @@ fn package_add_materializes_local_slice_lock_cache_and_receipts() {
         .expect("read add receipt"),
     )
     .expect("add receipt json");
-    assert_eq!(add_receipt["schema"], forge::PACKAGE_ADD_RECEIPT_SCHEMA);
-    assert_eq!(add_receipt["format"], forge::PACKAGE_CONTRACT_FORMAT);
+    assert_eq!(add_receipt["schema"], dx_forge::PACKAGE_ADD_RECEIPT_SCHEMA);
+    assert_eq!(add_receipt["format"], dx_forge::PACKAGE_CONTRACT_FORMAT);
     assert_eq!(add_receipt["package"]["name"], "dx-www/dashboard-card");
     assert_eq!(
         add_receipt["cache"]["cached_files"]
@@ -178,8 +178,8 @@ fn package_status_lock_and_media_receipt_are_real() {
     fs::write(dir.path().join("assets/preview.mp4"), media).expect("write media");
 
     let manifest = serde_json::json!({
-        "schema": forge::PACKAGE_MANIFEST_SCHEMA,
-        "format": forge::PACKAGE_CONTRACT_FORMAT,
+        "schema": dx_forge::PACKAGE_MANIFEST_SCHEMA,
+        "format": dx_forge::PACKAGE_CONTRACT_FORMAT,
         "packages": [
             {
                 "name": "demo/ui-button",
@@ -241,8 +241,8 @@ fn package_status_lock_and_media_receipt_are_real() {
     .expect("write package manifest");
 
     let status = build_package_status(&repo).expect("package status");
-    assert_eq!(status.schema, forge::PACKAGE_STATUS_SCHEMA);
-    assert_eq!(status.format, forge::PACKAGE_CONTRACT_FORMAT);
+    assert_eq!(status.schema, dx_forge::PACKAGE_STATUS_SCHEMA);
+    assert_eq!(status.format, dx_forge::PACKAGE_CONTRACT_FORMAT);
     assert!(!status.package_lock_present);
     assert_eq!(status.summary.package_count, 1);
     assert_eq!(status.summary.remote_count, 2);
@@ -258,8 +258,8 @@ fn package_status_lock_and_media_receipt_are_real() {
     assert!(status.media[0].content_hash.is_some());
 
     let lock = write_package_lock(&repo, &status).expect("write package lock");
-    assert_eq!(lock.schema, forge::PACKAGE_LOCK_SCHEMA);
-    assert_eq!(lock.format, forge::PACKAGE_CONTRACT_FORMAT);
+    assert_eq!(lock.schema, dx_forge::PACKAGE_LOCK_SCHEMA);
+    assert_eq!(lock.format, dx_forge::PACKAGE_CONTRACT_FORMAT);
     assert!(repo.package_lock_path().exists());
 
     let receipt = write_package_status_receipt(&repo, &status).expect("write receipt");
@@ -358,7 +358,7 @@ fn checkout_archives_stale_files_before_removing_them() {
         .expect("archive path");
     let archive_path = dir.path().join(archive_rel);
     let archived =
-        forge::store::compression::decompress(&fs::read(archive_path).expect("read archive"))
+        dx_forge::store::compression::decompress(&fs::read(archive_path).expect("read archive"))
             .expect("decompress archive");
     assert_eq!(archived, b"non-code stale media payload\n");
 }
@@ -543,7 +543,7 @@ fn execute_sync_cancels_when_requested_remote_is_missing() {
     assert!(report
         .warnings
         .iter()
-        .any(|warning| warning.contains("blocked by 1 unresolved conflict")));
+        .any(|warning: &String| warning.contains("blocked by 1 unresolved conflict")));
     assert!(report
         .plan
         .conflicts
@@ -551,11 +551,11 @@ fn execute_sync_cancels_when_requested_remote_is_missing() {
         .any(|conflict| conflict.summary.contains("requested remote 'missing'")));
 
     let db = MetadataDb::open(&repo.metadata_db_path()).expect("open db");
-    let jobs = forge::list_jobs(&db).expect("list jobs");
+    let jobs = dx_forge::list_jobs(&db).expect("list jobs");
     assert!(jobs.iter().any(|job| {
         job.description.contains("execute sync plan")
-            && matches!(job.kind, forge::JobKind::SyncRun)
-            && matches!(job.status, forge::JobStatus::Cancelled)
+            && matches!(job.kind, dx_forge::JobKind::SyncRun)
+            && matches!(job.status, dx_forge::JobStatus::Cancelled)
     }));
 }
 
@@ -566,10 +566,10 @@ fn retry_job_reuses_sync_job_and_increments_attempts() {
 
     let _ = execute_sync(&repo, Some("missing"), false, false).expect("initial sync run");
     let db = MetadataDb::open(&repo.metadata_db_path()).expect("open db");
-    let first_job = forge::list_jobs(&db)
+    let first_job = dx_forge::list_jobs(&db)
         .expect("list jobs")
         .into_iter()
-        .find(|job| matches!(job.kind, forge::JobKind::SyncRun))
+        .find(|job| matches!(job.kind, dx_forge::JobKind::SyncRun))
         .expect("sync job present");
     assert_eq!(first_job.attempts, 1);
     drop(db);
@@ -580,11 +580,11 @@ fn retry_job_reuses_sync_job_and_increments_attempts() {
     assert_eq!(outcome.new_attempts, 2);
 
     let db = MetadataDb::open(&repo.metadata_db_path()).expect("reopen db");
-    let refreshed = forge::load_job(&db, &first_job.id)
+    let refreshed = dx_forge::load_job(&db, &first_job.id)
         .expect("reload job")
         .expect("job still present");
     assert_eq!(refreshed.attempts, 2);
-    assert!(matches!(refreshed.status, forge::JobStatus::Cancelled));
+    assert!(matches!(refreshed.status, dx_forge::JobStatus::Cancelled));
 }
 
 #[test]
@@ -594,10 +594,10 @@ fn retry_job_blocks_until_backoff_window_elapses() {
 
     let _ = execute_sync(&repo, Some("missing"), false, false).expect("initial sync run");
     let db = MetadataDb::open(&repo.metadata_db_path()).expect("open db");
-    let first_job = forge::list_jobs(&db)
+    let first_job = dx_forge::list_jobs(&db)
         .expect("list jobs")
         .into_iter()
-        .find(|job| matches!(job.kind, forge::JobKind::SyncRun))
+        .find(|job| matches!(job.kind, dx_forge::JobKind::SyncRun))
         .expect("sync job present");
     drop(db);
 
@@ -645,7 +645,7 @@ fn remote_health_reports_auth_and_last_job_state() {
     assert!(!origin.authenticated);
     assert!(matches!(
         origin.last_job_status,
-        Some(forge::JobStatus::Cancelled)
+        Some(dx_forge::JobStatus::Cancelled)
     ));
 }
 
@@ -688,8 +688,8 @@ fn sync_run_pushes_to_local_transport_remote() {
 
     let report = execute_sync(&source_repo, Some("lan"), false, false).expect("execute sync");
     assert!(report.results.iter().any(|result| result.remote == "lan"
-        && matches!(result.kind, forge::SyncActionKind::PushBranch)
-        && matches!(result.state, forge::SyncActionState::Executed)));
+        && matches!(result.kind, dx_forge::SyncActionKind::PushBranch)
+        && matches!(result.state, dx_forge::SyncActionState::Executed)));
 
     assert!(remote_repo
         .forge_dir

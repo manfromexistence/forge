@@ -1,8 +1,8 @@
 use std::fs;
 use std::path::Path;
 
-use forge::dx_status::{inspect_dx_status, DxArtifactState, DxMachineKind};
-use forge::Repository;
+use dx_forge::dx_status::{inspect_dx_status, DxArtifactState, DxMachineKind};
+use dx_forge::Repository;
 use serializer::llm::convert::CompressionAlgorithm;
 use serializer::machine::{
     paths_for_project_cache, source_fingerprint, write_typed_machine_cache, MachineCacheKind,
@@ -132,7 +132,7 @@ fn dx_status_flags_stale_serializer_machine_metadata() {
     assert!(report
         .warnings
         .iter()
-        .any(|warning| warning.contains("stale")));
+        .any(|warning: &String| warning.contains("stale")));
 }
 
 #[test]
@@ -172,7 +172,7 @@ fn dx_status_cli_prints_json_without_requiring_package_manifest() {
     write_dx_source(dir.path());
     generate_serializer_machine(dir.path());
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!("forge")
+    let output = assert_cmd::cargo::cargo_bin_cmd!("dx-forge")
         .arg("--repo-dir")
         .arg(dir.path())
         .args(["dx", "status", "--json"])
