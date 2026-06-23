@@ -1,0 +1,84 @@
+name: Build macOS
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-13
+            arch: x86_64
+            target: x86_64-apple-darwin
+          - os: macos-14
+            arch: aarch64
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Create DMG structure
+        run: |
+          mkdir -p dmg_dir
+          cp target/${{ matrix.target }}/release/dx-forge dmg_dir/
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname "dx-forge" -srcfolder dmg_dir -ov -format UDZO dx-forge-${{ matrix.arch }}.dmg
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: dx-forge-macos-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/dx-forge
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: dx-forge-macos-${{ matrix.arch }}-dmg
+          path: dx-forge-${{ matrix.arch }}.dmg
+
+  universal:
+    name: Create Universal Binary
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dx-forge-macos-*
+          merge-multiple: false
+          path: binaries
+
+      - name: Lipo universal binary
+        run: |
+          mkdir -p universal_dir
+          lipo -create -output universal_dir/dx-forge binaries/dx-forge-macos-x86_64/dx-forge binaries/dx-forge-macos-aarch64/dx-forge
+
+      - name: Create universal DMG
+        run: |
+          hdiutil create -volname "dx-forge" -srcfolder universal_dir -ov -format UDZO dx-forge-universal.dmg
+
+      - name: Upload Universal Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: dx-forge-macos-universal
+          path: universal_dir/dx-forge
+
+      - name: Upload Universal DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: dx-forge-macos-universal-dmg
+          path: dx-forge-universal.dmg
